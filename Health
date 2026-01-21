@@ -1,0 +1,150 @@
+local TweenService = game:GetService("TweenService")
+
+local npcFolders = {
+	workspace:WaitForChild("NPCFolders"):WaitForChild("FriendlyFolder"),
+	workspace:WaitForChild("NPCFolders"):WaitForChild("EnemyFolder")
+}
+
+local function createHealthDisplay(npc, isEnemy)
+	if not npc:FindFirstChild("Humanoid") then return end
+	local humanoid = npc.Humanoid
+	local head = npc:FindFirstChild("Head")
+	if not head or head:FindFirstChild("HealthDisplay") then return end
+
+	-- Billboard
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "HealthDisplay"
+	billboard.Size = UDim2.new(0, 90, 0, 36) -- taller to fit name
+	billboard.StudsOffset = Vector3.new(0, 3.2, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = head
+
+	-- NPC Name
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, 0, 0.28, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.TextScaled = true
+	nameLabel.Font = Enum.Font.Arcade
+	nameLabel.TextStrokeTransparency = 0.4
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.Text = npc.Name
+	nameLabel.Parent = billboard
+
+	-- Damage text
+	local damageLabel = Instance.new("TextLabel")
+	damageLabel.Size = UDim2.new(1, 0, 0.28, 0)
+	damageLabel.Position = UDim2.new(0, 0, 0.28, 0)
+	damageLabel.BackgroundTransparency = 1
+	damageLabel.TextScaled = true
+	damageLabel.Font = Enum.Font.Arcade
+	damageLabel.TextStrokeTransparency = 0.4
+	damageLabel.TextColor3 = Color3.fromRGB(255, 230, 0)
+	damageLabel.TextTransparency = 1
+	damageLabel.Parent = billboard
+
+	-- Outline
+	local outline = Instance.new("Frame")
+	outline.Size = UDim2.new(1, 0, 0.32, 0)
+	outline.Position = UDim2.new(0, 0, 0.6, 0)
+	outline.BackgroundColor3 = Color3.new(0, 0, 0)
+	outline.BorderSizePixel = 0
+	outline.Parent = billboard
+
+	local outlineCorner = Instance.new("UICorner")
+	outlineCorner.CornerRadius = UDim.new(0, 7)
+	outlineCorner.Parent = outline
+
+	-- Bar background
+	local barBackground = Instance.new("Frame")
+	barBackground.Size = UDim2.new(1, -2, 1, -2)
+	barBackground.Position = UDim2.new(0, 1, 0, 1)
+	barBackground.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	barBackground.BorderSizePixel = 0
+	barBackground.Parent = outline
+
+	local bgCorner = Instance.new("UICorner")
+	bgCorner.CornerRadius = UDim.new(0, 6)
+	bgCorner.Parent = barBackground
+
+	-- Bar fill
+	local barFill = Instance.new("Frame")
+	barFill.Size = UDim2.new(1, 0, 1, 0)
+	barFill.BackgroundColor3 = isEnemy and Color3.fromRGB(255, 145, 0) or Color3.fromRGB(0, 185, 255)
+	barFill.BorderSizePixel = 0
+	barFill.Parent = barBackground
+
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(0, 6)
+	fillCorner.Parent = barFill
+
+	-- Health numbers
+	local healthLabel = Instance.new("TextLabel")
+	healthLabel.Size = UDim2.new(1, 0, 1, 0)
+	healthLabel.BackgroundTransparency = 1
+	healthLabel.TextScaled = true
+	healthLabel.Font = Enum.Font.Arcade
+	healthLabel.TextStrokeTransparency = 0.4
+	healthLabel.TextColor3 = Color3.new(1, 1, 1)
+	healthLabel.ZIndex = 2
+	healthLabel.Parent = barBackground
+
+	local lastHealth = humanoid.Health
+	local stackedDamage = 0
+	local lastHitTime = 0
+
+	local function updateDamageLabel()
+		if stackedDamage > 0 then
+			damageLabel.Text = "-" .. stackedDamage
+			damageLabel.TextTransparency = 0
+		else
+			damageLabel.TextTransparency = 1
+		end
+	end
+
+	local function updateHealth()
+		local percent = humanoid.Health / humanoid.MaxHealth
+		TweenService:Create(
+			barFill,
+			TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Size = UDim2.new(percent, 0, 1, 0) }
+		):Play()
+
+		healthLabel.Text = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+	end
+
+	humanoid.HealthChanged:Connect(function(current)
+		local damage = lastHealth - current
+		if damage > 0 then
+			stackedDamage += math.floor(damage)
+			lastHitTime = tick()
+			updateDamageLabel()
+		end
+		lastHealth = current
+		updateHealth()
+	end)
+
+	task.spawn(function()
+		while billboard.Parent do
+			task.wait(0.1)
+			if stackedDamage > 0 and tick() - lastHitTime >= 5 then
+				stackedDamage = 0
+				updateDamageLabel()
+			end
+		end
+	end)
+
+	updateHealth()
+end
+
+local function setupFolder(folder, isEnemy)
+	for _, npc in ipairs(folder:GetChildren()) do
+		createHealthDisplay(npc, isEnemy)
+	end
+	folder.ChildAdded:Connect(function(child)
+		task.wait(0.2)
+		createHealthDisplay(child, isEnemy)
+	end)
+end
+
+setupFolder(npcFolders[1], false)
+setupFolder(npcFolders[2], true)
